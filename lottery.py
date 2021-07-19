@@ -1,6 +1,8 @@
 import sys
 import os
 import random
+from queue import Queue
+import threading
 import datetime
 
 
@@ -59,77 +61,25 @@ def alpha2dec(input):  # Excel形式の行の名前のうっざいアルファ�
 
 
 # 入力csvの二次元配列とデータベースと当選後下がる確率と何列目に希望クラスが入ってるかと何人まで当選できるかと何番目に学年、クラス、番号が入ってるか
-def lottery(input, dbpath, per, col, col2, nums, c1, c2, c3, mushi, sec, secred, secwri):
-    people = [[]]
-    ll = []
-    winners = {}
-    writewinners = {}
-    numdict = {"5A": nums[0], "5B": nums[1], "5C": nums[2], "5D": nums[3],
-               "6A": nums[4], "6B": nums[5], "6C": nums[6], "6D": nums[7]}
-    if mushi == True:
-        print("m")
-        input = input[1:]
-    for i in input:  # 希望クラスごとに振り分ける
-        if len(i) >= col:
-            if i[col] in ll:
-                people[ll.index(i[col])].append(i)
-            else:
-                ll.append(i[col])
-                people.append([])
-                people[ll.index(i[col])].append(i)
-    for group in people:
-        tickets = {}
-        cnt = 0
-        for person in group:
-            try:
-                if os.path.exists(dbpath) == True:
-                    with open(dbpath, mode='r') as f:
-                        parsedcsv = usparser(f.read())
-                else:
-                    parsedcsv = []
-            except:
-                print("error when opening file!")
-                pass
-            n = 100  # とりあえず100％にしといて
-            for p in parsedcsv:
-                if p == []:
-                    continue
-                if len(person) < c1 and len(person) < c2 and len(person) < c3:
-                    continue
-                if p[0] == person[c1] and p[1] == person[c2] and p[2] == person[c3]:  # もし前にもう当選してたら
-                    n = n - per  # n％減らす
-            for c in range(0, n):
-                tickets[c+(cnt*n)] = person
-            cnt += 1
-        if len(group) == 0 or len(group[0]) == 0:
-            continue
-        for co in range(0, numdict[group[0][col]]):
-            t2 = list(tickets.keys())
-            if t2 == []:
-                print("there are no more people who has possibility to win")
-                continue
-            w = random.choice(t2)
-            input.remove(tickets[w])
-            if tickets[w][col] not in winners:
-                winners[tickets[w][col]] = []
-            temp = winners[tickets[w][col]]
-            temp.append(tickets[w])
-            winners[tickets[w][col]] = temp
-            writewinners[tickets[w][col]] = temp
-            wintickets = [k for k, v in tickets.items() if v == tickets[w]]
-            for rem in wintickets:
-                tickets.pop(rem)
-    if sec == True:  # パラメータによって2回目の抽選をする
-        ll = []
+def lottery(input, dbpath, per, col, col2, nums, c1, c2, c3, mushi, sec, secred, secwri, lt, wt):
+    try:
         people = [[]]
+        ll = []
+        winners = {}
+        writewinners = {}
+        numdict = {"5A": nums[0], "5B": nums[1], "5C": nums[2], "5D": nums[3],
+                   "6A": nums[4], "6B": nums[5], "6C": nums[6], "6D": nums[7]}
+        if mushi == True:
+            print("m")
+            input = input[1:]
         for i in input:  # 希望クラスごとに振り分ける
-            if len(i) >= col2:
-                if i[col2] in ll:
-                    people[ll.index(i[col2])].append(i)
+            if len(i) > col:
+                if i[col] in ll:
+                    people[ll.index(i[col])].append(i)
                 else:
-                    ll.append(i[col2])
+                    ll.append(i[col])
                     people.append([])
-                    people[ll.index(i[col2])].append(i)
+                    people[ll.index(i[col])].append(i)
         for group in people:
             tickets = {}
             cnt = 0
@@ -147,41 +97,101 @@ def lottery(input, dbpath, per, col, col2, nums, c1, c2, c3, mushi, sec, secred,
                 for p in parsedcsv:
                     if p == []:
                         continue
-                    if p[0] == person[c1] and p[1] == person[c2] and p[2] == person[c3] and secred == True:  # もし前にもう当選してたら
+                    if len(person) < c1 and len(person) < c2 and len(person) < c3:
+                        continue
+                    if p[0] == person[c1] and p[1] == person[c2] and p[2] == person[c3]:  # もし前にもう当選してたら
                         n = n - per  # n％減らす
                 for c in range(0, n):
                     tickets[c+(cnt*n)] = person
                 cnt += 1
-            if group == []:
+            if len(group) == 0 or len(group[0]) == 0:
                 continue
-            if group[0][col2] not in winners:
-                print("test")
-                winners[group[0][col2]] = [[]]
-            print(numdict[group[0][col2]])
-            print(group[0][col2] in winners)
-            if len(group) == 0:
-                continue
-            for co in range(0, numdict[group[0][col2]] - len(winners[group[0][col2]])):
-                print("second lottery")
+            for co in range(0, numdict[group[0][col]]):
                 t2 = list(tickets.keys())
                 if t2 == []:
                     print("there are no more people who has possibility to win")
                     continue
                 w = random.choice(t2)
-                if tickets[w][col2] not in winners:
-                    winners[tickets[w][col2]] = [[]]
-                temp = winners[tickets[w][col2]]
+                input.remove(tickets[w])
+                if tickets[w][col] not in winners:
+                    winners[tickets[w][col]] = []
+                temp = winners[tickets[w][col]]
                 temp.append(tickets[w])
-                winners[tickets[w][col2]] = temp
-                if secwri == True:
-                    writewinners[tickets[w][col2]] = temp
+                winners[tickets[w][col]] = temp
+                writewinners[tickets[w][col]] = temp
                 wintickets = [k for k, v in tickets.items() if v == tickets[w]]
                 for rem in wintickets:
                     tickets.pop(rem)
+        if sec == True:  # パラメータによって2回目の抽選をする
+            ll = []
+            people = [[]]
+            for i in input:  # 希望クラスごとに振り分ける
+                if len(i) > col2:
+                    if i[col2] in ll:
+                        people[ll.index(i[col2])].append(i)
+                    else:
+                        ll.append(i[col2])
+                        people.append([])
+                        people[ll.index(i[col2])].append(i)
+            for group in people:
+                tickets = {}
+                cnt = 0
+                for person in group:
+                    try:
+                        if os.path.exists(dbpath) == True:
+                            with open(dbpath, mode='r') as f:
+                                parsedcsv = usparser(f.read())
+                        else:
+                            parsedcsv = []
+                    except:
+                        print("error when opening file!")
+                        pass
+                    n = 100  # とりあえず100％にしといて
+                    for p in parsedcsv:
+                        if p == []:
+                            continue
+                        # もし前にもう当選してたら
+                        if p[0] == person[c1] and p[1] == person[c2] and p[2] == person[c3] and secred == True:
+                            n = n - per  # n％減らす
+                    for c in range(0, n):
+                        tickets[c+(cnt*n)] = person
+                    cnt += 1
+                if group == []:
+                    continue
+                if group[0][col2] not in winners:
+                    print("test")
+                    winners[group[0][col2]] = [[]]
+                print(numdict[group[0][col2]])
+                print(group[0][col2] in winners)
+                if len(group) == 0:
+                    continue
+                for co in range(0, numdict[group[0][col2]] - len(winners[group[0][col2]])):
+                    print("second lottery")
+                    t2 = list(tickets.keys())
+                    if t2 == []:
+                        print("there are no more people who has possibility to win")
+                        continue
+                    w = random.choice(t2)
+                    if tickets[w][col2] not in winners:
+                        winners[tickets[w][col2]] = [[]]
+                    temp = winners[tickets[w][col2]]
+                    temp.append(tickets[w])
+                    winners[tickets[w][col2]] = temp
+                    if secwri == True:
+                        writewinners[tickets[w][col2]] = temp
+                    wintickets = [k for k, v in tickets.items()
+                                  if v == tickets[w]]
+                    for rem in wintickets:
+                        tickets.pop(rem)
+        lt.put(winners)
+        wt.put(writewinners)
+    except:
+        pass
     return winners, writewinners
 
 
 def dbupdate(input, path, c1, c2, c3):  # 入力データとデータのパスと何列目に学年、クラス、番号が入ってるか
+    print("updating database")
     if os.path.exists(path) == False:
         print("there are no database file, so we'll make it")
         wincontainer = []
@@ -262,8 +272,10 @@ if __name__ == '__main__':
     f = open("test.csv")
     kh = usparser(f.read())
     f.close()
+    lt = [[]]
+    wt = [[]]
     lt, wt = lottery(kh, "db.csv", 20, 3, 4, [
-        10, 10, 10, 10, 10, 10, 10, 10], 0, 1, 2, False, True, True, True)
+        10, 10, 10, 10, 10, 10, 10, 10], 0, 1, 2, False, True, True, True, lt, wt)
     dbupdate(wt, "db.csv", 0, 1, 2)
     today = datetime.date.today()
     print(postprocess(lt, 5, "", False, today.year))
